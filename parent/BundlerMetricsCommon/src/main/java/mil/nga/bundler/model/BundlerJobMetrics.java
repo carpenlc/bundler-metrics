@@ -1,6 +1,10 @@
 package mil.nga.bundler.model;
 
 import java.io.Serializable;
+import java.text.DateFormat;
+import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -28,6 +32,11 @@ public class BundlerJobMetrics implements Serializable {
      */
     private static final long serialVersionUID = 6753952384456901668L;
 
+    /**
+     * String to use to output dates in String format for logging purposes.
+     */
+    private static final String DATE_STRING = "yyyy/MM/dd HH:mm:ss:SSS";
+    
     /**
      * The target size of each output archive.
      */
@@ -171,6 +180,16 @@ public class BundlerJobMetrics implements Serializable {
     }
     
     /**
+     * Getter method for the amount of compression achieved for the job.
+     * This version formats the percentage as a pretty String.
+     * @return The compression percentage.
+     */
+    public String getCompressionPercentageAsString() {
+        DecimalFormat df = new DecimalFormat("##.##%");
+        return df.format(getCompressionPercentage());
+    }
+    
+    /**
      * Getter method for the amount ot time taken to complete the job. 
      * @return The elapsed time for the job.
      */
@@ -223,6 +242,15 @@ public class BundlerJobMetrics implements Serializable {
     }
     
     /**
+     * Getter method for the time when the archive job started.
+     * @return The time the archive job started.
+     */
+    public String getStartTimeAsString() {
+        DateFormat df = new SimpleDateFormat(DATE_STRING);
+        return df.format(new Date(getStartTime()));
+    }
+    
+    /**
      * Getter method for total size of the job.
      * @return Total size of the job.
      */
@@ -261,6 +289,37 @@ public class BundlerJobMetrics implements Serializable {
      */
     public String getUserName() {
         return userName;
+    }
+    
+    /**
+     * Convert the object to string representation for logging purposes.
+     */
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Job ID => [ ");
+        sb.append(getJobID());
+        sb.append(" ], Start Time => [ ");
+        sb.append(getStartTimeAsString());
+        sb.append(" ], Archive Type => [ ");
+        sb.append(getArchiveType());
+        sb.append(" ], Archive Size => [ ");
+        sb.append(getArchiveSize());
+        sb.append(" ], Num Archives => [ ");
+        sb.append(getNumArchives()); 
+        sb.append(" ], Num Files => [ ");
+        sb.append(getNumFiles());       
+        sb.append(" ], Total Size => [ ");
+        sb.append(getTotalSize());
+        sb.append(" ], Total Compressed Size => [ ");
+        sb.append(getTotalCompressedSize());
+        sb.append(" ], Compression Percentage => [ ");
+        sb.append(getCompressionPercentageAsString());
+        sb.append(" ], Job State => [ ");
+        sb.append(getJobState());
+        sb.append(" ], Elapsed Time => [ ");
+        sb.append(getElapsedTime());
+        sb.append(" ] ms.");
+        return sb.toString();
     }
     
     /**
