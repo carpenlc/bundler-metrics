@@ -17,6 +17,12 @@ import javax.naming.NamingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI;
+import mil.nga.bundler.ejb.jdbc.JDBCArchiveService;
+import mil.nga.bundler.ejb.jdbc.JDBCFileService;
+import mil.nga.bundler.ejb.jdbc.JDBCJobMetricsService;
+import mil.nga.bundler.ejb.jdbc.JDBCJobService;
+
 /**
  * Convenience class used by the Web tier to look up EJB references within
  * the container.  This class is specific to the JBoss/Wildfly application
@@ -136,6 +142,77 @@ public class EJBClientUtilities {
     }
 
     /**
+     * Return the raw reference to the target EJB.
+     * 
+     * @param clazz The Class reference to look up.
+     * @return The superclass (Object) reference to the target EJB. 
+     */
+    private Object getEJB(Class<?> clazz, Class<?> interfaceClazz) {
+        
+        Object ejb  = null;
+        String name = getJNDIName(clazz, interfaceClazz);
+        
+        try {
+            Context ctx = getInitialContext();
+            if (ctx != null) {
+                ejb =  ctx.lookup(name);
+            }
+            else {
+                LOGGER.error("Unable to look up the InitialContext.  See "
+                        + "previous errors for more information.");
+            }
+        }
+        catch (NamingException ne) {
+            LOGGER.error("Unexpected NamingException attempting to "
+                    + "look up EJB [ "
+                    + name
+                    + " ].  Error encountered [ "
+                    + ne.getMessage()
+                    + " ].");
+        }
+        return ejb;
+    }
+    
+    /**
+     * Construct the JBoss appropriate JNDI lookup name for the input Class
+     * object.
+     * 
+     * @param clazz EJB class reference we want to look up.
+     * @return The JBoss appropriate JNDI lookup name.
+     */
+    private String getJNDIName(Class<?> clazz, Class<?> interfaceClazz) {
+        
+        String appName = EAR_APPLICATION_NAME;
+        String moduleName = EJB_MODULE_NAME;
+        
+        // String distinctName = "";
+        String beanName = clazz.getSimpleName();
+        String interfaceName = interfaceClazz.getName();
+        
+        // The following lookup is when using a local/remote interface
+        // view.
+        // String name = "ejb:" 
+        //        + appName + "/" 
+        //        + moduleName + "/" 
+        //        + distinctName + "/" 
+        //        + beanName + "!" + interfaceName;
+
+        // When using a no-interface view for the beans, the following is the
+        // lookup.
+        String name = "java:global/" 
+                + appName + "/"
+                + moduleName + "/"
+                + beanName + "!" + interfaceName;
+        
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Looking up [ "
+                    + name
+                    + " ].");
+        }
+        return name;
+    }
+    
+    /**
      * Simple method used to get the initial context used by nearly all
      * of the methods in this class.
      * 
@@ -165,24 +242,24 @@ public class EJBClientUtilities {
     } 
 
     /**
-     * Utility method used to look up the JobMetricsCollector interface.  
+     * Utility method used to look up the JDBCArchiveService interface.  
      * This method is only called by the web tier.
      * 
-     * @return The JobMetricsCollector interface, or null if we couldn't 
+     * @return The JDBCArchiveService interface, or null if we couldn't 
      * look it up.
      */
-    public JobMetricsCollector getJobMetricsCollector() {
+    public JDBCArchiveService getJDBCArchiveService() {
         
-        JobMetricsCollector service = null;
-        Object           ejb     = getEJB(JobMetricsCollector.class);
+        JDBCArchiveService service = null;
+        Object           ejb     = getEJB(JDBCArchiveService.class);
         
         if (ejb != null) {
-            if (ejb instanceof mil.nga.bundler.ejb.JobMetricsCollector) {
-                service = (JobMetricsCollector)ejb;
+            if (ejb instanceof mil.nga.bundler.ejb.jdbc.JDBCArchiveService) {
+                service = (JDBCArchiveService)ejb;
             }
             else {
                 LOGGER.error("Unable to look up EJB [ "
-                        + getJNDIName(JobMetricsCollector.class)
+                        + getJNDIName(JDBCArchiveService.class)
                         + " ] returned reference was the wrong type.  "
                         + "Type returned [ "
                         + ejb.getClass().getCanonicalName()
@@ -191,7 +268,142 @@ public class EJBClientUtilities {
         }
         else {
             LOGGER.error("Unable to look up EJB [ "
-                    + getJNDIName(JobMetricsCollector.class)
+                    + getJNDIName(JDBCArchiveService.class)
+                    + " ] returned reference was null.");
+        }
+        return service;
+    }
+    
+    /**
+     * Utility method used to look up the JDBCFileService interface.  
+     * This method is only called by the web tier.
+     * 
+     * @return The JDBCFileService interface, or null if we couldn't 
+     * look it up.
+     */
+    public JDBCFileService getJDBCFileService() {
+        
+        JDBCFileService service = null;
+        Object           ejb     = getEJB(JDBCFileService.class);
+        
+        if (ejb != null) {
+            if (ejb instanceof mil.nga.bundler.ejb.jdbc.JDBCFileService) {
+                service = (JDBCFileService)ejb;
+            }
+            else {
+                LOGGER.error("Unable to look up EJB [ "
+                        + getJNDIName(JDBCFileService.class)
+                        + " ] returned reference was the wrong type.  "
+                        + "Type returned [ "
+                        + ejb.getClass().getCanonicalName()
+                        + " ].");
+            }
+        }
+        else {
+            LOGGER.error("Unable to look up EJB [ "
+                    + getJNDIName(JDBCFileService.class)
+                    + " ] returned reference was null.");
+        }
+        return service;
+    }
+    
+    /**
+     * Utility method used to look up the JDBCJobMetricsService interface.  
+     * This method is only called by the web tier.
+     * 
+     * @return The JDBCJobMetricsService interface, or null if we couldn't 
+     * look it up.
+     */
+    public JDBCJobMetricsService getJDBCJobMetricsService() {
+        
+        JDBCJobMetricsService service = null;
+        Object           ejb     = getEJB(JDBCJobMetricsService.class);
+        
+        if (ejb != null) {
+            if (ejb instanceof mil.nga.bundler.ejb.jdbc.JDBCJobMetricsService) {
+                service = (JDBCJobMetricsService)ejb;
+            }
+            else {
+                LOGGER.error("Unable to look up EJB [ "
+                        + getJNDIName(JDBCJobMetricsService.class)
+                        + " ] returned reference was the wrong type.  "
+                        + "Type returned [ "
+                        + ejb.getClass().getCanonicalName()
+                        + " ].");
+            }
+        }
+        else {
+            LOGGER.error("Unable to look up EJB [ "
+                    + getJNDIName(JDBCJobMetricsService.class)
+                    + " ] returned reference was null.");
+        }
+        return service;
+    }
+    
+    /**
+     * Utility method used to look up the JDBCJobService interface.  
+     * This method is only called by the web tier.
+     * 
+     * @return The JDBCJobService interface, or null if we couldn't 
+     * look it up.
+     */
+    public JDBCJobService getJDBCJobService() {
+        
+        JDBCJobService service = null;
+        Object           ejb     = getEJB(JDBCJobService.class);
+        
+        if (ejb != null) {
+            if (ejb instanceof mil.nga.bundler.ejb.jdbc.JDBCJobService) {
+                service = (JDBCJobService)ejb;
+            }
+            else {
+                LOGGER.error("Unable to look up EJB [ "
+                        + getJNDIName(JDBCJobService.class)
+                        + " ] returned reference was the wrong type.  "
+                        + "Type returned [ "
+                        + ejb.getClass().getCanonicalName()
+                        + " ].");
+            }
+        }
+        else {
+            LOGGER.error("Unable to look up EJB [ "
+                    + getJNDIName(JDBCJobService.class)
+                    + " ] returned reference was null.");
+        }
+        return service;
+    }
+    
+    /**
+     * Utility method used to look up the JobMetricsCollector interface.  
+     * This method is only called by the web tier.
+     * 
+     * @return The JobMetricsCollector interface, or null if we couldn't 
+     * look it up.
+     */
+    public JobMetricsCollectorI getJobMetricsCollector() {
+        
+        JobMetricsCollectorI service = null;
+        Object           ejb     = getEJB(JobMetricsCollector.class,
+                                           JobMetricsCollectorI.class);
+        
+        if (ejb != null) {
+            if (ejb instanceof mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI) {
+                service = (JobMetricsCollectorI)ejb;
+            }
+            else {
+                LOGGER.error("Unable to look up EJB [ "
+                        + getJNDIName(JobMetricsCollector.class,
+                                JobMetricsCollectorI.class)
+                        + " ] returned reference was the wrong type.  "
+                        + "Type returned [ "
+                        + ejb.getClass().getCanonicalName()
+                        + " ].");
+            }
+        }
+        else {
+            LOGGER.error("Unable to look up EJB [ "
+                    + getJNDIName(JobMetricsCollector.class,
+                            JobMetricsCollectorI.class)
                     + " ] returned reference was null.");
         }
         return service;

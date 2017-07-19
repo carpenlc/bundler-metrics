@@ -23,11 +23,22 @@ import mil.nga.bundler.types.JobStateType;
 /**
  * Session bean providing methods for interfacing with the table containing
  * the bundler job metrics information.
+ * 
+ * This class is written assuming that the injected DataSource object is not
+ * handling the transactions on behalf of the application (i.e. non-JTA).  If 
+ * this bean is deployed to a container with JTA enabled, the insert and 
+ * update functions will throw exceptions when attempting to manage the 
+ * underlying transaction.
  */
 @Stateless
 @LocalBean
 public class JDBCJobMetricsService {
 
+    /**
+     * The target table name.
+     */
+    public static final String TABLE_NAME = "BUNDLER_JOB_METRICS";
+    
     /**
      * Set up the logging system for use throughout the class
      */        
@@ -35,14 +46,9 @@ public class JDBCJobMetricsService {
             JDBCJobMetricsService.class);
     
     /**
-     * The target table name.
+     * Container-injected datasource object.  
      */
-    public static final String TABLE_NAME = "BUNDLER_JOB_METRICS";
-    
-    /**
-     * Container-injected datasource object.
-     */
-    @Resource(mappedName="java:jboss/datasources/JobTracker")
+    @Resource(mappedName="java:jboss/datasources/JobTracker-nonJTA")
     DataSource datasource;
     
     /**
@@ -237,7 +243,7 @@ public class JDBCJobMetricsService {
         long              start  = System.currentTimeMillis();
         String            sql    = "insert into "
                 + TABLE_NAME 
-                + "(ARCHIVE_SIZE, ARCHIVE_TYPE, "
+                + " (ARCHIVE_SIZE, ARCHIVE_TYPE, "
                 + "ELAPSED_TIME, JOB_ID, JOB_STATE, NUM_ARCHIVES, "
                 + "NUM_ARCHIVES_COMPLETE, NUM_FILES, NUM_FILES_COMPLETE, "
                 + "START_TIME, TOTAL_COMPRESSED_SIZE, TOTAL_SIZE, USER_NAME) "
@@ -250,6 +256,11 @@ public class JDBCJobMetricsService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
                     stmt.setLong(   1,  metrics.getArchiveSize());
                     stmt.setString( 2,  metrics.getArchiveType().getText());
@@ -265,6 +276,10 @@ public class JDBCJobMetricsService {
                     stmt.setLong(   12, metrics.getTotalSize());
                     stmt.setString( 13, metrics.getUserName());
                     stmt.executeUpdate();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
                     
                 }
                 catch (SQLException se) {

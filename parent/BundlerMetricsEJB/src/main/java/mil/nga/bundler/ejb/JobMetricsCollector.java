@@ -9,6 +9,7 @@ import javax.ejb.Stateless;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI;
 import mil.nga.bundler.ejb.jdbc.JDBCJobMetricsService;
 import mil.nga.bundler.ejb.jdbc.JDBCJobService;
 import mil.nga.bundler.model.Archive;
@@ -21,7 +22,7 @@ import mil.nga.bundler.types.JobStateType;
  */
 @Stateless
 @LocalBean
-public class JobMetricsCollector {
+public class JobMetricsCollector implements JobMetricsCollectorI {
 
     /**
      * Set up the logging system for use throughout the class
@@ -158,19 +159,52 @@ public class JobMetricsCollector {
      * Public entry point starting the metrics collection process.
      */
     public void collectMetrics() {
+        
+        int  counter   = 0;
+        long startTime = System.currentTimeMillis();
+        
         List<String> sourceList = getJobs();
         if ((sourceList != null) && (!sourceList.isEmpty())) {
+            
+            LOGGER.info("Processing [ "
+                    + sourceList.size()
+                    + " ] jobs.");
+            
             for (String jobID : sourceList) {
+                
                 Job job = jobService.getMaterializedJob(jobID);
-                if ((job.getState() == JobStateType.COMPLETE) ||
-                    (job.getState() == JobStateType.ERROR)) {
-                    BundlerJobMetrics metrics = getJobMetrics(job);
-                    metricsService.insert(metrics);
+                if (job != null) {
+                    
+                    // Ensure that the job is in a "completed" state.
+                    if ((job.getState() == JobStateType.COMPLETE) ||
+                        (job.getState() == JobStateType.ERROR) || 
+                        (job.getState() == JobStateType.INVALID_REQUEST)) {
+                        
+                        BundlerJobMetrics metrics = getJobMetrics(job);
+                        if (LOGGER.isDebugEnabled()) {
+                            LOGGER.debug("Inserting metrics record => " + metrics.toString());
+                        }
+                        
+                        metricsService.insert(metrics);
+                        counter++;
+                        
+                    }
+                }
+                else {
+                    LOGGER.warn("Unable to find a job matching job ID [ "
+                            + jobID
+                            + " ].  Job object returned was null.");
                 }
             }
         }
         else {
             LOGGER.info("There are no jobs requiring metrics collection.");
         }
+        
+        LOGGER.info("Metrics collection completed in [ "
+                + (System.currentTimeMillis() - startTime)
+                + " ] ms and processed [ "
+                + counter
+                + " ] jobs.");
     }
 }

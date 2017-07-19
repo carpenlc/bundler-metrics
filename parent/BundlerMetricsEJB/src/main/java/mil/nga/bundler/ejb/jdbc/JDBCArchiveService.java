@@ -37,6 +37,11 @@ import org.slf4j.LoggerFactory;
 public class JDBCArchiveService {
     
     /**
+     * Table used to extract the target archive information.
+     */
+    private static final String TABLE_NAME = "ARCHIVE_JOBS_TOO_LARGE";
+    
+    /**
      * Set up the logging system for use throughout the class
      */        
     private static final Logger LOGGER = LoggerFactory.getLogger(
@@ -45,7 +50,7 @@ public class JDBCArchiveService {
     /**
      * Container-injected datasource object.
      */
-    @Resource(mappedName="java:jboss/datasources/JobTracker")
+    @Resource(mappedName="java:jboss/datasources/JobTracker-nonJTA")
     DataSource datasource;
     
     /**
@@ -85,8 +90,9 @@ public class JDBCArchiveService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "delete from ARCHIVE_JOBS where "
-                + "JOB_ID = ?";
+        String            sql    = "delete from "
+                + TABLE_NAME 
+                + " where JOB_ID = ?";
         
         if (datasource != null) {
             if ((jobID != null) && (!jobID.isEmpty())) {
@@ -94,15 +100,25 @@ public class JDBCArchiveService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
                     stmt.setString(1, jobID);
                     stmt.executeUpdate();
                     
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
+                    
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised "
-                            + "while attempting to delete ARCHIVE_JOBS "
-                            + "records associated with job ID [ "
+                            + "while attempting to delete [ "
+                            + TABLE_NAME
+                            + " ] records associated with job ID [ "
                             + jobID
                             + " ].  Error message [ "
                             + se.getMessage() 
@@ -129,7 +145,9 @@ public class JDBCArchiveService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("ARCHIVE_JOBS records delected in [ "
+            LOGGER.debug("[ "
+                    + TABLE_NAME 
+                    + " ] records deleted in [ "
                     + (System.currentTimeMillis() - start) 
                     + " ] ms.");
         }    
@@ -147,8 +165,9 @@ public class JDBCArchiveService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "delete from ARCHIVE_JOBS where "
-                + "ARCHIVE_ID = ? AND JOB_ID = ?";
+        String            sql    = "delete from "
+                + TABLE_NAME 
+                + " where ARCHIVE_ID = ? AND JOB_ID = ?";
         
         if (datasource != null) {
             if (archiveID >= 0) {
@@ -157,16 +176,26 @@ public class JDBCArchiveService {
                     try { 
                         
                         conn = datasource.getConnection();
+                        
+                        // Note: If the container Datasource has jta=true this will throw
+                        // an exception.
+                        conn.setAutoCommit(false);
+                        
                         stmt = conn.prepareStatement(sql);
                         stmt.setLong(1, archiveID);
                         stmt.setString(2, jobID);
                         stmt.executeUpdate();
                         
+                        // Note: If the container Datasource has jta=true this will throw
+                        // an exception.
+                        conn.commit();
+                        
                     }
                     catch (SQLException se) {
                         LOGGER.error("An unexpected SQLException was raised "
-                                + "while attempting to delete ARCHIVE_JOBS "
-                                + "records associated with job ID [ "
+                                + "while attempting to delete [ "
+                                + TABLE_NAME 
+                                + " ] records associated with job ID [ "
                                 + jobID
                                 + " ] and archive ID [ "
                                 + archiveID
@@ -202,7 +231,9 @@ public class JDBCArchiveService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("ARCHIVE_JOBS records delected in [ "
+            LOGGER.debug("[ "
+                    + TABLE_NAME
+                    + " ] records delected in [ "
                     + (System.currentTimeMillis() - start) 
                     + " ] ms.");
         }    
@@ -219,8 +250,9 @@ public class JDBCArchiveService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "delete from ARCHIVE_JOBS where "
-                + "JOB_ID = ?";
+        String            sql    = "delete from "
+                + TABLE_NAME
+                + " where JOB_ID = ?";
         
         if (datasource != null) {
             if ((jobID != null) && (!jobID.isEmpty())) {
@@ -238,9 +270,18 @@ public class JDBCArchiveService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
                     stmt.setString(1, jobID);
                     stmt.executeUpdate();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
                     
                 }
                 catch (SQLException se) {
@@ -310,10 +351,19 @@ public class JDBCArchiveService {
                     try { 
                         
                         conn = datasource.getConnection();
+                        
+                        // Note: If the container Datasource has jta=true this will throw
+                        // an exception.
+                        conn.setAutoCommit(false);
+                        
                         stmt = conn.prepareStatement(sql);
                         stmt.setLong(1, archiveID);
                         stmt.setString(2, jobID);
                         stmt.executeUpdate();
+                        
+                        // Note: If the container Datasource has jta=true this will throw
+                        // an exception.
+                        conn.commit();
                         
                     }
                     catch (SQLException se) {
@@ -382,7 +432,9 @@ public class JDBCArchiveService {
                 + "ARCHIVE_ID, ARCHIVE_STATE, ARCHIVE_TYPE, ARCHIVE_URL, "    
                 + "END_TIME, HASH_FILE, HASH_FILE_URL, HOST_NAME, JOB_ID, "
                 + "NUM_FILES, SERVER_NAME, ARCHIVE_SIZE, START_TIME "
-                + "from ARCHIVE_JOBS where JOB_ID = ? order by ARCHIVE_ID";
+                + "from "
+                + TABLE_NAME 
+                + " where JOB_ID = ? order by ARCHIVE_ID";
         
         if (datasource != null) {
             if ((jobID != null) && (!jobID.isEmpty())) {
@@ -422,8 +474,9 @@ public class JDBCArchiveService {
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "
-                            + "attempting to retrieve a list of FILE_ENTRY "
-                            + "objects from the target data source.  Error "
+                            + "attempting to retrieve a list of [ "
+                            + TABLE_NAME 
+                            + " ] objects from the target data source.  Error "
                             + "message [ "
                             + se.getMessage() 
                             + " ].");
@@ -479,7 +532,9 @@ public class JDBCArchiveService {
                 + "ARCHIVE_ID, ARCHIVE_STATE, ARCHIVE_TYPE, ARCHIVE_URL, "    
                 + "END_TIME, HASH_FILE, HASH_FILE_URL, HOST_NAME, JOB_ID, "
                 + "NUM_FILES, SERVER_NAME, ARCHIVE_SIZE, START_TIME "
-                + "from ARCHIVE_JOBS where JOB_ID = ? and ARCHIVE_ID = ? ";
+                + "from "
+                + TABLE_NAME 
+                + " where JOB_ID = ? and ARCHIVE_ID = ? ";
         
         if (datasource != null) {
             if (archiveID >= 0) {
@@ -522,8 +577,9 @@ public class JDBCArchiveService {
                             }
                             else {
                                 LOGGER.warn("Unable to obtain a reference to "
-                                        + "the JDBCFileService EJB.  "
-                                        + "FILE_ENTRY entries for job ID [ "
+                                        + "the JDBCFileService EJB. [ "
+                                        + TABLE_NAME 
+                                        + " ] entries for job ID [ "
                                         + jobID
                                         + " ] and archive ID [ "
                                         + archiveID
@@ -533,8 +589,9 @@ public class JDBCArchiveService {
                     }
                     catch (SQLException se) {
                         LOGGER.error("An unexpected SQLException was raised while "
-                                + "attempting to retrieve a list of FILE_ENTRY "
-                                + "objects from the target data source.  Error "
+                                + "attempting to retrieve a list of [ "
+                                + TABLE_NAME
+                                + " ] objects from the target data source.  Error "
                                 + "message [ "
                                 + se.getMessage() 
                                 + " ].");
@@ -572,7 +629,9 @@ public class JDBCArchiveService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Retrieval of ARCHIVE_JOB object for job ID [ "
+            LOGGER.debug("Retrieval of [ "
+                    + TABLE_NAME 
+                    + " ] object for job ID [ "
                     + jobID
                     + " ] and archive ID [ "
                     + archiveID
@@ -640,7 +699,7 @@ public class JDBCArchiveService {
         PreparedStatement stmt   = null;
         ResultSet         rs     = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "select unique(HOST_NAME) from ARCHIVE_JOBS";
+        String            sql    = "select unique(HOST_NAME) from " + TABLE_NAME;
         
         if (datasource != null) {
             
@@ -698,8 +757,9 @@ public class JDBCArchiveService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "insert into ARCHIVE_JOBS ("
-                        + "ARCHIVE_FILE, ARCHIVE_ID, ARCHIVE_STATE, "
+        String            sql    = "insert into "
+                + TABLE_NAME 
+                +" (ARCHIVE_FILE, ARCHIVE_ID, ARCHIVE_STATE, "
                         + "ARCHIVE_TYPE, ARCHIVE_URL, END_TIME, HASH_FILE, "
                         + "HASH_FILE_URL, HOST_NAME, JOB_ID, "
                         + "NUM_FILES, SERVER_NAME, ARCHIVE_SIZE, START_TIME) "
@@ -713,8 +773,9 @@ public class JDBCArchiveService {
                 }
                 else {
                     LOGGER.error("Unable to obtain a reference to the "
-                            + "JDBCFileService EJB.  FILE_ENTRY entries for "
-                            + "job ID [ "
+                            + "JDBCFileService EJB.  [ "
+                            + TABLE_NAME 
+                            + " ] entries for job ID [ "
                             + archive.getJobID()
                             + " ] and archive ID [ "
                             + archive.getArchiveID()
@@ -724,28 +785,38 @@ public class JDBCArchiveService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
-                    stmt.setString(1, archive.getArchiveFilename());
-                    stmt.setLong(2, archive.getArchiveID());
-                    stmt.setString(3, archive.getArchiveState().getText());
-                    stmt.setString(4, archive.getArchiveType().getText());
-                    stmt.setString(5, archive.getArchiveURL());
-                    stmt.setLong(6, archive.getEndTime());
-                    stmt.setString(7, archive.getHashFilename());
-                    stmt.setString(8, archive.getHashURL());
-                    stmt.setString(9, archive.getHostName());
-                    stmt.setString(10, archive.getJobID());
-                    stmt.setInt(11, archive.getNumFiles());
-                    stmt.setString(12, archive.getServerName());
-                    stmt.setLong(13, archive.getSize());
-                    stmt.setLong(14, archive.getStartTime());
+                    stmt.setString( 1,  archive.getArchiveFilename());
+                    stmt.setLong(   2,  archive.getArchiveID());
+                    stmt.setString( 3,  archive.getArchiveState().getText());
+                    stmt.setString( 4,  archive.getArchiveType().getText());
+                    stmt.setString( 5,  archive.getArchiveURL());
+                    stmt.setLong(   6,  archive.getEndTime());
+                    stmt.setString( 7,  archive.getHashFilename());
+                    stmt.setString( 8,  archive.getHashURL());
+                    stmt.setString( 9,  archive.getHostName());
+                    stmt.setString( 10, archive.getJobID());
+                    stmt.setInt(    11, archive.getNumFiles());
+                    stmt.setString( 12, archive.getServerName());
+                    stmt.setLong(   13, archive.getSize());
+                    stmt.setLong(   14, archive.getStartTime());
                     stmt.executeUpdate();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
                     
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "
-                            + "attempting to insert a new ARCHIVE_JOB object "
-                            + "into the data store.  Error message [ "
+                            + "attempting to insert a new [ "
+                            + TABLE_NAME 
+                            + " ] object into the data store.  Error message [ "
                             + se.getMessage() 
                             + " ].");
                 }
@@ -765,7 +836,9 @@ public class JDBCArchiveService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Insert of ARCHIVE_JOB object for job ID [ "
+            LOGGER.debug("Insert of ["
+                    + TABLE_NAME 
+                    + "] object for job ID [ "
                     + archive.getJobID()
                     + " ] completed in [ "
                     + (System.currentTimeMillis() - start) 
@@ -803,7 +876,7 @@ public class JDBCArchiveService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "update ARCHIVE_JOBS set "
+        String            sql    = "update " + TABLE_NAME + " set " 
                         + "ARCHIVE_FILE = ?, ARCHIVE_ID = ?, ARCHIVE_STATE = ?, "
                         + "ARCHIVE_TYPE = ?, ARCHIVE_URL = ?, END_TIME = ?, "
                         + "HASH_FILE = ?, HASH_FILE_URL = ?, HOST_NAME = ?, "
@@ -818,8 +891,9 @@ public class JDBCArchiveService {
                 }
                 else {
                     LOGGER.error("Unable to obtain a reference to the "
-                            + "JDBCFileService EJB.  FILE_ENTRY entries for "
-                            + "job ID [ "
+                            + "JDBCFileService EJB.  [ "
+                            + TABLE_NAME 
+                            + " ] entries for job ID [ "
                             + archive.getJobID()
                             + " ] and archive ID [ "
                             + archive.getArchiveID()
@@ -829,6 +903,11 @@ public class JDBCArchiveService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
                     stmt.setString(1, archive.getArchiveFilename());
                     stmt.setLong(2, archive.getArchiveID());
@@ -847,10 +926,16 @@ public class JDBCArchiveService {
                     stmt.setLong(15, archive.getID());
                     stmt.executeUpdate();
                     
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
+                    
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "
-                            + "attempting to insert a new ARCHIVE_JOB object "
+                            + "attempting to insert a new [ "
+                            + TABLE_NAME 
+                            + " ] object "
                             + "into the data store.  Error message [ "
                             + se.getMessage() 
                             + " ].");

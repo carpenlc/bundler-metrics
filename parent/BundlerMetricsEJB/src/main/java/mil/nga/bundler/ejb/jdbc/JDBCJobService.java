@@ -34,6 +34,11 @@ import org.slf4j.LoggerFactory;
 public class JDBCJobService {
 
     /**
+     * Table used to extract the target archive information.
+     */
+    private static final String TABLE_NAME = "JOBS_TOO_LARGE";
+    
+    /**
      * Set up the logging system for use throughout the class
      */        
     private static final Logger LOGGER = LoggerFactory.getLogger(
@@ -42,7 +47,7 @@ public class JDBCJobService {
     /**
      * Container-injected datasource object.
      */
-    @Resource(mappedName="java:jboss/datasources/JobTracker")
+    @Resource(mappedName="java:jboss/datasources/JobTracker-nonJTA")
     DataSource datasource;
     
     /**
@@ -83,7 +88,7 @@ public class JDBCJobService {
         PreparedStatement stmt   = null;
         ResultSet         rs     = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "select JOB_ID from JOBS";
+        String            sql    = "select JOB_ID from " + TABLE_NAME;
         
         if (datasource != null) {
             
@@ -150,7 +155,9 @@ public class JDBCJobService {
                 + "ARCHIVE_TYPE, END_TIME, NUM_ARCHIVES, "
                 + "NUM_ARCHIVES_COMPLETE, NUM_FILES, NUM_FILES_COMPLETE, "
                 + "START_TIME, JOB_STATE, TOTAL_SIZE, TOTAL_SIZE_COMPLETE, "
-                + "USER_NAME from JOBS order by START_TIME desc";
+                + "USER_NAME from "
+                + TABLE_NAME
+                + " order by START_TIME desc";
         
         if (datasource != null) {
             try {
@@ -228,7 +235,9 @@ public class JDBCJobService {
                 + "ARCHIVE_TYPE, END_TIME, NUM_ARCHIVES, "
                 + "NUM_ARCHIVES_COMPLETE, NUM_FILES, NUM_FILES_COMPLETE, "
                 + "START_TIME, JOB_STATE, TOTAL_SIZE, TOTAL_SIZE_COMPLETE, "
-                + "USER_NAME from JOBS where JOB_ID = ?";
+                + "USER_NAME from "
+                + TABLE_NAME 
+                + " where JOB_ID = ?";
 
         
         if (datasource != null) {
@@ -267,8 +276,9 @@ public class JDBCJobService {
                         }
                         else {
                             LOGGER.error("Unable to obtain a reference to the "
-                                    + "JDBCArchiveService EJB.  ARCHIVE_JOB "
-                                    + "entries for job ID [ "
+                                    + "JDBCArchiveService EJB.  [ "
+                                    + TABLE_NAME
+                                    + " ] entries for job ID [ "
                                     + jobID
                                     + " ] were not loaded from the data "
                                     + "store.");
@@ -339,7 +349,7 @@ public class JDBCJobService {
                 + "ARCHIVE_TYPE, END_TIME, NUM_ARCHIVES, "
                 + "NUM_ARCHIVES_COMPLETE, NUM_FILES, NUM_FILES_COMPLETE, "
                 + "START_TIME, JOB_STATE, TOTAL_SIZE, TOTAL_SIZE_COMPLETE, "
-                + "USER_NAME from JOBS where START_TIME > ? "
+                + "USER_NAME from " + TABLE_NAME + " where START_TIME > ? "
                 + "and START_TIME < ? order by START_TIME desc";
         
         

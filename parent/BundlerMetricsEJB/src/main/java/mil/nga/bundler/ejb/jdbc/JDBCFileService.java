@@ -25,6 +25,12 @@ import org.slf4j.LoggerFactory;
  * that will allow the Job class to be materialized without the use of the 
  * complex joins that occur in JPA.  
  * 
+ * This class is written assuming that the injected DataSource object is not
+ * handling the transactions on behalf of the application (i.e. non-JTA).  If 
+ * this bean is deployed to a container with JTA enabled, the insert and 
+ * update functions will throw exceptions when attempting to manage the 
+ * underlying transaction.
+ * 
  * @author L. Craig Carpenter
  */
 @Stateless
@@ -40,8 +46,13 @@ public class JDBCFileService {
     /**
      * Container-injected datasource object.
      */
-    @Resource(mappedName="java:jboss/datasources/JobTracker")
+    @Resource(mappedName="java:jboss/datasources/JobTracker-nonJTA")
     DataSource datasource;
+    
+    /**
+     * Table used to extract the target archive information.
+     */
+    private static final String TABLE_NAME = "FILE_ENTRY_TOO_LARGE";
     
     /**
      * Default Eclipse-generated constructor. 
@@ -58,8 +69,8 @@ public class JDBCFileService {
         
         Connection        conn   = null;
         PreparedStatement stmt   = null;
-        long              start  = System.currentTimeMillis();
-        String            sql    = "delete from FILE_ENTRY where "
+        long             start  = System.currentTimeMillis();
+        String            sql    = "delete from " + TABLE_NAME + " where "
                 + "JOB_ID = ?";
         
         if (datasource != null) {
@@ -68,15 +79,24 @@ public class JDBCFileService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
                     stmt.setString(1, jobID);
                     stmt.executeUpdate();
                     
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised "
-                            + "while attempting to delete FILE_ENTRY "
-                            + "records associated with job ID [ "
+                            + "while attempting to delete [ "
+                            + TABLE_NAME
+                            + " ] records associated with job ID [ "
                             + jobID
                             + " ].  Error message [ "
                             + se.getMessage() 
@@ -102,7 +122,9 @@ public class JDBCFileService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("FILE_ENTRY records deleted in [ "
+            LOGGER.debug("[ "
+                    + TABLE_NAME 
+                    + " ] records deleted in [ "
                     + (System.currentTimeMillis() - start) 
                     + " ] ms.");
         }    
@@ -119,7 +141,7 @@ public class JDBCFileService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "delete from FILE_ENTRY where "
+        String            sql    = "delete from " + TABLE_NAME + " where "
                 + "ARCHIVE_ID = ? AND JOB_ID = ?";
         
         if (datasource != null) {
@@ -129,16 +151,26 @@ public class JDBCFileService {
                     try { 
                         
                         conn = datasource.getConnection();
+                        
+                        // Note: If the container Datasource has jta=true this will throw
+                        // an exception.
+                        conn.setAutoCommit(false);
+                        
                         stmt = conn.prepareStatement(sql);
                         stmt.setLong(1, archiveID);
                         stmt.setString(2, jobID);
                         stmt.executeUpdate();
                         
+                        // Note: If the container Datasource has jta=true this will throw
+                        // an exception.
+                        conn.commit();
+                    
                     }
                     catch (SQLException se) {
                         LOGGER.error("An unexpected SQLException was raised "
-                                + "while attempting to delete FILE_ENTRY "
-                                + "records associated with job ID [ "
+                                + "while attempting to delete [ "
+                                + TABLE_NAME
+                                + " ] records associated with job ID [ "
                                 + jobID
                                 + " ] and archive ID [ "
                                 + archiveID
@@ -174,7 +206,9 @@ public class JDBCFileService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("FILE_ENTRY records delected in [ "
+            LOGGER.debug("[ "
+                    + TABLE_NAME
+                    + " ] records delected in [ "
                     + (System.currentTimeMillis() - start) 
                     + " ] ms.");
         }    
@@ -194,10 +228,12 @@ public class JDBCFileService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         ResultSet         rs     = null;
-        long              start  = System.currentTimeMillis();
+        long             start  = System.currentTimeMillis();
         String            sql    = "select ID, ARCHIVE_ID, "
                 + "ARCHIVE_ENTRY_PATH, FILE_STATE, JOB_ID, PATH, FILE_SIZE "
-                + "from FILE_ENTRY where ARCHIVE_ID = ? AND JOB_ID = ?";
+                + "from "
+                + TABLE_NAME
+                + " where ARCHIVE_ID = ? AND JOB_ID = ?";
         
         if (datasource != null) {
             if (archiveID >= 0) {
@@ -229,8 +265,9 @@ public class JDBCFileService {
                     }
                     catch (SQLException se) {
                         LOGGER.error("An unexpected SQLException was raised while "
-                                + "attempting to retrieve a list of FILE_ENTRY "
-                                + "objects from the target data source.  Error "
+                                + "attempting to retrieve a list of [ "
+                                + TABLE_NAME
+                                + " ] objects from the target data source.  Error "
                                 + "message [ "
                                 + se.getMessage() 
                                 + " ].");
@@ -289,7 +326,7 @@ public class JDBCFileService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "update FILE_ENTRY set ARCHIVE_ID = ?, "
+        String            sql    = "update " + TABLE_NAME + " set ARCHIVE_ID = ?, "
                 + "ARCHIVE_ENTRY_PATH = ?, FILE_STATE = ?, JOB_ID = ?, "
                 + "PATH = ? , FILE_SIZE = ? where ID = ?";
         
@@ -299,21 +336,31 @@ public class JDBCFileService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
-                    stmt.setLong(1, file.getArchiveID());
+                    stmt.setLong(  1, file.getArchiveID());
                     stmt.setString(2, file.getEntryPath());
                     stmt.setString(3, file.getFileState().getText());
                     stmt.setString(4, file.getJobID());
                     stmt.setString(5, file.getFilePath());
-                    stmt.setLong(6,  file.getSize());
-                    stmt.setLong(7,  file.getID());
+                    stmt.setLong(  6, file.getSize());
+                    stmt.setLong(  7, file.getID());
                     stmt.executeUpdate();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
                     
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "
-                            + "attempting to update FILE_ENTRY object with "
-                            + "ID [ "
+                            + "attempting to update [ "
+                            + TABLE_NAME 
+                            + " ] object with ID [ "
                             + file.getID()
                             + " ].  Error message [ "
                             + se.getMessage() 
@@ -335,7 +382,9 @@ public class JDBCFileService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Update of FILE_ENTRY record with ID [ "
+            LOGGER.debug("Update of [ "
+                    + TABLE_NAME 
+                    + " ] record with ID [ "
                     + file.getID()
                     + " ] completed in [ "
                     + (System.currentTimeMillis() - start) 
@@ -375,7 +424,9 @@ public class JDBCFileService {
         Connection        conn   = null;
         PreparedStatement stmt   = null;
         long              start  = System.currentTimeMillis();
-        String            sql    = "insert into FILE_ENTRY (ARCHIVE_ID, "
+        String            sql    = "insert into "
+                + TABLE_NAME 
+                + " (ARCHIVE_ID, "
                 + "ARCHIVE_ENTRY_PATH, FILE_STATE, JOB_ID, "
                 + "PATH, FILE_SIZE) values (?, ?, ?, ?, ?, ?)";
         
@@ -385,6 +436,11 @@ public class JDBCFileService {
                 try { 
                     
                     conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
                     stmt = conn.prepareStatement(sql);
                     stmt.setLong(1, file.getArchiveID());
                     stmt.setString(2, file.getEntryPath());
@@ -394,10 +450,16 @@ public class JDBCFileService {
                     stmt.setLong(6,  file.getSize());
                     stmt.executeUpdate();
                     
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
+                    
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "
-                            + "attempting to insert a new FILE_ENTRY object.  "
+                            + "attempting to insert a new [ "
+                            + TABLE_NAME 
+                            + " ] object.  "
                             + "Error message [ "
                             + se.getMessage() 
                             + " ].");
@@ -418,7 +480,9 @@ public class JDBCFileService {
         }
         
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Insert of FILE_ENTRY for job ID [ "
+            LOGGER.debug("Insert of [ "
+                    + TABLE_NAME 
+                    + " ] for job ID [ "
                     + file.getJobID()
                     + " ] completed in [ "
                     + (System.currentTimeMillis() - start) 
