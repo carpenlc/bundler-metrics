@@ -11,7 +11,8 @@ import javax.ws.rs.core.Response.Status;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import mil.nga.bundler.ejb.CleanupTimerBean;
+import mil.nga.bundler.ejb.EJBClientUtilities;
+import mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI;
 import mil.nga.util.HostNameUtils;
 
 /**
@@ -37,24 +38,24 @@ public class BundlerMetrics {
     /**
      * Container-injected EJB reference.
      */
-    JobMetricsCollector service;
+    JobMetricsCollectorI service;
     
     /**
      * Private method used to obtain a reference to the target EJB.  
      * 
      * @return Reference to the JobMetricsCollector EJB.
      */
-    private  getJobMetricsCollector() {
+    private JobMetricsCollectorI getJobMetricsCollector() {
         if (service == null) {
             
             LOGGER.warn("Application container failed to inject the "
-                    + "reference to [ JobMetricsCollector ].  Attempting to "
+                    + "reference to [ JobMetricsCollectorI ].  Attempting to "
                     + "look it up via JNDI.");
             service = EJBClientUtilities
                     .getInstance()
                     .getJobMetricsCollector();
         }
-        return timerBean;
+        return service;
     }
     
     /**
@@ -80,12 +81,12 @@ public class BundlerMetrics {
     
     @GET
     @Path("/startMetricsCollection")
-    public String startCleanup() {
+    public Response startCleanup() {
             if (getJobMetricsCollector() != null) {
                 getJobMetricsCollector().collectMetrics();
             }
             else {
-                return "Unable to look up the job metrics collector service!";
+                Response.status(Status.NOT_FOUND).build();
             }
         return Response.status(Status.OK).entity("Done!").build();
     }
