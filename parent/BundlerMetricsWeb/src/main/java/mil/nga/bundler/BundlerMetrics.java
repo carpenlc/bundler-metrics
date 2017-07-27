@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import mil.nga.bundler.ejb.EJBClientUtilities;
+import mil.nga.bundler.ejb.exceptions.EJBLookupException;
 import mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI;
 import mil.nga.util.HostNameUtils;
 
@@ -45,11 +46,13 @@ public class BundlerMetrics {
      * 
      * @return Reference to the JobMetricsCollector EJB.
      */
-    private JobMetricsCollectorI getJobMetricsCollector() {
+    private JobMetricsCollectorI getJobMetricsCollector() 
+            throws EJBLookupException {
         if (service == null) {
-            
             LOGGER.warn("Application container failed to inject the "
-                    + "reference to [ JobMetricsCollectorI ].  Attempting to "
+                    + "reference to [ "
+                    + JobMetricsCollectorI.class.getName()
+                    + " ].  Attempting to "
                     + "look it up via JNDI.");
             service = EJBClientUtilities
                     .getInstance()
@@ -79,15 +82,23 @@ public class BundlerMetrics {
             
     }
     
+    /**
+     * Simple method allowing clients to manually start the metrics 
+     * collection process from a browser.
+     */
     @GET
     @Path("/startMetricsCollection")
     public Response startCleanup() {
-            if (getJobMetricsCollector() != null) {
-                getJobMetricsCollector().collectMetrics();
-            }
-            else {
-                Response.status(Status.NOT_FOUND).build();
-            }
+        try {
+            getJobMetricsCollector().collectMetrics();
+        }
+        catch (EJBLookupException ele) {
+            LOGGER.error("Unexpected EJBLookupException raised while "
+                    + "attempting to look up EJB [ "
+                    + ele.getEJBName()
+                    + " ].");
+            Response.status(Status.NOT_FOUND).build();
+        }
         return Response.status(Status.OK).entity("Done!").build();
     }
 }
