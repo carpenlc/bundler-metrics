@@ -14,6 +14,7 @@ import javax.ejb.Stateless;
 import javax.sql.DataSource;
 
 import mil.nga.bundler.ejb.EJBClientUtilities;
+import mil.nga.bundler.ejb.exceptions.EJBLookupException;
 import mil.nga.bundler.model.Job;
 import mil.nga.bundler.types.ArchiveType;
 import mil.nga.bundler.types.JobStateType;
@@ -36,7 +37,7 @@ public class JDBCJobService {
     /**
      * Table used to extract the target archive information.
      */
-    private static final String TABLE_NAME = "JOBS_TOO_LARGE";
+    private static final String TABLE_NAME = "JOBS";
     
     /**
      * Set up the logging system for use throughout the class
@@ -47,7 +48,7 @@ public class JDBCJobService {
     /**
      * Container-injected datasource object.
      */
-    @Resource(mappedName="java:jboss/datasources/JobTracker-nonJTA")
+    @Resource(mappedName="java:jboss/datasources/JobTracker")
     DataSource datasource;
     
     /**
@@ -65,16 +66,129 @@ public class JDBCJobService {
      * Private method used to obtain a reference to the target EJB.  
      * @return Reference to the JobService EJB.
      */
-    private JDBCArchiveService getJDBCArchiveService() {
+    private JDBCArchiveService getJDBCArchiveService() 
+            throws EJBLookupException {
+        
         if (jdbcArchiveService == null) {
+            
             LOGGER.warn("Application container failed to inject the "
                     + "reference to the JDBCArchiveService EJB.  Attempting "
                     + "to look it up via JNDI.");
             jdbcArchiveService = EJBClientUtilities
                     .getInstance()
                     .getJDBCArchiveService();
+            
+            // If it's still null, throw an exception to prevent NPE later.
+            if (jdbcArchiveService == null) {
+                throw new EJBLookupException(
+                        "Unable to obtain a reference to [ "
+                        + JDBCArchiveService.class.getName()
+                        + " ].",
+                        JDBCArchiveService.class.getName());
+            }
         }
         return jdbcArchiveService;
+    }
+    
+    /**
+     * Delete all information associated with the input jobID from the back-end
+     * data store.
+     * 
+     * @param jobID The target job ID to delete.
+     */
+    public void delete(String jobID) {
+        
+        Connection        conn   = null;
+        List<String>      jobIDs = new ArrayList<String>();
+        PreparedStatement stmt   = null;
+        ResultSet         rs     = null;
+        long              start  = System.currentTimeMillis();
+        String            sql    = "delete from " + TABLE_NAME  
+                + " where JOB_ID = ?";
+            
+        if (datasource != null) {
+            if ((jobID != null) && (!jobID.isEmpty())) {
+                
+                try {
+                    
+                    // First, delete the associated archive and file objects
+                    getJDBCArchiveService().deepDeleteArchive(jobID);
+                
+                    conn = datasource.getConnection();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.setAutoCommit(false);
+                    
+                    stmt = conn.prepareStatement(sql);
+                    stmt.setString(1, jobID);
+                    stmt.executeUpdate();
+                    
+                    // Note: If the container Datasource has jta=true this will throw
+                    // an exception.
+                    conn.commit();
+                    
+                }
+                catch (EJBLookupException ele) {
+                    LOGGER.error("Unable to obtain a reference to [ "
+                            + ele.getEJBName()
+                            + " ].  Delete of job [  "
+                            + jobID
+                            + " ] will not be performed.");
+                }
+                catch (SQLException se) {
+                    LOGGER.error("An unexpected SQLException was raised while "
+                            + "attempting to insert delete a [ "
+                            + TABLE_NAME 
+                            + " ] object "
+                            + "from the data store.  Error message [ "
+                            + se.getMessage() 
+                            + " ].");
+                }
+                finally {
+                    try { 
+                        if (stmt != null) { stmt.close(); } 
+                    } catch (Exception e) {}
+                    try { 
+                        if (conn != null) { conn.close(); } 
+                    } catch (Exception e) {}
+                }
+            }
+            else {
+                LOGGER.warn("Input JOB_ID field is null or empty.  "
+                        + "Delete operation will not be performed.");
+            }
+        }
+        else {
+            LOGGER.warn("DataSource object not injected by the container.  "
+                    + "An empty List will be returned to the caller.");
+        }
+        
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Delete of [ "
+                    + TABLE_NAME
+                    + " ] record for job ID [ "
+                    + jobID
+                    + " ] completed in [ "
+                    + (System.currentTimeMillis() - start) 
+                    + " ] ms.");
+        }
+    }
+    
+    /**
+     * Delete all information associated with the input Job from the back-end
+     * data store.
+     * 
+     * @param job The target job object to delete.
+     */
+    public void delete(Job job) {
+        if (job != null) {
+            delete(job.getJobID());
+        }
+        else {
+            LOGGER.error("The input Job object is null.  Delete operation "
+                    + "not be performed.");
+        }
     }
     
     /**
@@ -95,6 +209,69 @@ public class JDBCJobService {
             try {
                 conn = datasource.getConnection();
                 stmt = conn.prepareStatement(sql);
+                rs   = stmt.executeQuery();
+                while (rs.next()) {
+                    jobIDs.add(rs.getString("JOB_ID"));
+                }
+            }
+            catch (SQLException se) {
+                LOGGER.error("An unexpected SQLException was raised while "
+                        + "attempting to retrieve a list of job IDs from the "
+                        + "target data source.  Error message [ "
+                        + se.getMessage() 
+                        + " ].");
+            }
+            finally {
+                try { 
+                    if (rs != null) { rs.close(); } 
+                } catch (Exception e) {}
+                try { 
+                    if (stmt != null) { stmt.close(); } 
+                } catch (Exception e) {}
+                try { 
+                    if (conn != null) { conn.close(); } 
+                } catch (Exception e) {}
+            }
+        }
+        else {
+            LOGGER.warn("DataSource object not injected by the container.  "
+                    + "An empty List will be returned to the caller.");
+        }
+        
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("[ "
+                    + jobIDs.size() 
+                    + " ] job IDs selected in [ "
+                    + (System.currentTimeMillis() - start) 
+                    + " ] ms.");
+        }
+        
+        return jobIDs;
+    }
+    
+    /**
+     * Retrieve a list of job IDs that were started prior to the input time.
+     * This method was added to facilitate cleanup of data from the back-end
+     * data store.
+     * 
+     * @return A list of job IDs.
+     */
+    public List<String> getJobIDs(long time) {
+        
+        Connection        conn   = null;
+        List<String>      jobIDs = new ArrayList<String>();
+        PreparedStatement stmt   = null;
+        ResultSet         rs     = null;
+        long              start  = System.currentTimeMillis();
+        String            sql    = "select JOB_ID from " + TABLE_NAME
+                + " where START_TIME < ?";
+        
+        if (datasource != null) {
+            
+            try {
+                conn = datasource.getConnection();
+                stmt = conn.prepareStatement(sql);
+                stmt.setLong(1, time);
                 rs   = stmt.executeQuery();
                 while (rs.next()) {
                     jobIDs.add(rs.getString("JOB_ID"));
@@ -248,6 +425,7 @@ public class JDBCJobService {
                     stmt = conn.prepareStatement(sql);
                     stmt.setString(1, jobID);
                     rs   = stmt.executeQuery();
+                    
                     if (rs.next()) {
                         
                         job.setJobID(rs.getString("JOB_ID"));
@@ -268,24 +446,18 @@ public class JDBCJobService {
                         job.setUserName(rs.getString("USER_NAME"));
                         
                         // Get the child archive data
-                        if (getJDBCArchiveService() != null) {
-                            job.setArchives(
-                                    getJDBCArchiveService().
-                                        getMaterializedArchives(
-                                            job.getJobID()));
-                        }
-                        else {
-                            LOGGER.error("Unable to obtain a reference to the "
-                                    + "JDBCArchiveService EJB.  [ "
-                                    + TABLE_NAME
-                                    + " ] entries for job ID [ "
-                                    + jobID
-                                    + " ] were not loaded from the data "
-                                    + "store.");
-                        }
-                        
+                        job.setArchives(
+                                getJDBCArchiveService().
+                                    getMaterializedArchives(
+                                        job.getJobID()));
                     }
-                    
+                }
+                catch (EJBLookupException ele) {
+                    LOGGER.error("Unable to obtain a reference to [ "
+                            + ele.getEJBName()
+                            + " ].  Delete of job [  "
+                            + jobID
+                            + " ] will not be performed.");
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "

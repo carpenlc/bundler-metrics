@@ -3,7 +3,7 @@ package mil.nga.bundler.ejb.interfaces;
 import javax.ejb.Remote;
 
 /**
- * Remote interface implemented by the JobMetricsCollector session bean.
+ * Local interface implemented by the JobMetricsCollector session bean. 
  * 
  * @author L. Craig Carpenter
  */

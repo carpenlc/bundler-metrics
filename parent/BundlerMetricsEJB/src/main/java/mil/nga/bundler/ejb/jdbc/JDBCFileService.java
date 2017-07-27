@@ -19,8 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Session Bean implementation class JDBCFileService
- * 
  * This class provides methods that interface with the FILE_ENTRY table 
  * that will allow the Job class to be materialized without the use of the 
  * complex joins that occur in JPA.  
@@ -36,7 +34,12 @@ import org.slf4j.LoggerFactory;
 @Stateless
 @LocalBean
 public class JDBCFileService {
-
+    
+    /**
+     * Table used to extract the target archive information.
+     */
+    private static final String TABLE_NAME = "FILE_ENTRY";
+    
     /**
      * Set up the logging system for use throughout the class
      */        
@@ -46,13 +49,8 @@ public class JDBCFileService {
     /**
      * Container-injected datasource object.
      */
-    @Resource(mappedName="java:jboss/datasources/JobTracker-nonJTA")
+    @Resource(mappedName="java:jboss/datasources/JobTracker")
     DataSource datasource;
-    
-    /**
-     * Table used to extract the target archive information.
-     */
-    private static final String TABLE_NAME = "FILE_ENTRY_TOO_LARGE";
     
     /**
      * Default Eclipse-generated constructor. 
@@ -315,6 +313,66 @@ public class JDBCFileService {
     }
     
     /**
+     * Retrieve a complete list of job IDs from the data store.  This method was 
+     * added in an effort to clean-up orphaned FILE_ENTRY records.
+     * 
+     * @return A list of job IDs.
+     */
+    public List<String> getJobIDs() {
+        
+        Connection        conn   = null;
+        List<String>      jobIDs = new ArrayList<String>();
+        PreparedStatement stmt   = null;
+        ResultSet         rs     = null;
+        long              start  = System.currentTimeMillis();
+        String            sql    = "select JOB_ID from " + TABLE_NAME;
+        
+        if (datasource != null) {
+            
+            try {
+                conn = datasource.getConnection();
+                stmt = conn.prepareStatement(sql);
+                rs   = stmt.executeQuery();
+                while (rs.next()) {
+                    jobIDs.add(rs.getString("JOB_ID"));
+                }
+            }
+            catch (SQLException se) {
+                LOGGER.error("An unexpected SQLException was raised while "
+                        + "attempting to retrieve a list of job IDs from the "
+                        + "target data source.  Error message [ "
+                        + se.getMessage() 
+                        + " ].");
+            }
+            finally {
+                try { 
+                    if (rs != null) { rs.close(); } 
+                } catch (Exception e) {}
+                try { 
+                    if (stmt != null) { stmt.close(); } 
+                } catch (Exception e) {}
+                try { 
+                    if (conn != null) { conn.close(); } 
+                } catch (Exception e) {}
+            }
+        }
+        else {
+            LOGGER.warn("DataSource object not injected by the container.  "
+                    + "An empty List will be returned to the caller.");
+        }
+        
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("[ "
+                    + jobIDs.size() 
+                    + " ] job IDs selected in [ "
+                    + (System.currentTimeMillis() - start) 
+                    + " ] ms.");
+        }
+        
+        return jobIDs;
+    }
+    
+    /**
      * Persist (update) the information associated with the input 
      * <code>FILE_ENTRY</code> object.
      * 
@@ -342,13 +400,13 @@ public class JDBCFileService {
                     conn.setAutoCommit(false);
                     
                     stmt = conn.prepareStatement(sql);
-                    stmt.setLong(  1, file.getArchiveID());
-                    stmt.setString(2, file.getEntryPath());
-                    stmt.setString(3, file.getFileState().getText());
-                    stmt.setString(4, file.getJobID());
-                    stmt.setString(5, file.getFilePath());
-                    stmt.setLong(  6, file.getSize());
-                    stmt.setLong(  7, file.getID());
+                    stmt.setLong(   1, file.getArchiveID());
+                    stmt.setString( 2, file.getEntryPath());
+                    stmt.setString( 3, file.getFileState().getText());
+                    stmt.setString( 4, file.getJobID());
+                    stmt.setString( 5, file.getFilePath());
+                    stmt.setLong(   6, file.getSize());
+                    stmt.setLong(   7, file.getID());
                     stmt.executeUpdate();
                     
                     // Note: If the container Datasource has jta=true this will throw

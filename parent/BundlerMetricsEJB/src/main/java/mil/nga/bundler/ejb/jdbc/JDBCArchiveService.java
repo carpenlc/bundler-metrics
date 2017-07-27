@@ -14,6 +14,7 @@ import javax.ejb.Stateless;
 import javax.sql.DataSource;
 
 import mil.nga.bundler.ejb.EJBClientUtilities;
+import mil.nga.bundler.ejb.exceptions.EJBLookupException;
 import mil.nga.bundler.model.Archive;
 import mil.nga.bundler.model.FileEntry;
 import mil.nga.bundler.types.ArchiveType;
@@ -39,7 +40,7 @@ public class JDBCArchiveService {
     /**
      * Table used to extract the target archive information.
      */
-    private static final String TABLE_NAME = "ARCHIVE_JOBS_TOO_LARGE";
+    private static final String TABLE_NAME = "ARCHIVE_JOBS";
     
     /**
      * Set up the logging system for use throughout the class
@@ -50,7 +51,7 @@ public class JDBCArchiveService {
     /**
      * Container-injected datasource object.
      */
-    @Resource(mappedName="java:jboss/datasources/JobTracker-nonJTA")
+    @Resource(mappedName="java:jboss/datasources/JobTracker")
     DataSource datasource;
     
     /**
@@ -68,7 +69,9 @@ public class JDBCArchiveService {
      * Private method used to obtain a reference to the target EJB.  
      * @return Reference to the JobService EJB.
      */
-    private JDBCFileService getJDBCFileService() {
+    private JDBCFileService getJDBCFileService() 
+            throws EJBLookupException {
+        
         if (jdbcFileService == null) {
             LOGGER.warn("Application container failed to inject the "
                     + "reference to the JDBCFileService EJB.  Attempting to "
@@ -76,12 +79,21 @@ public class JDBCArchiveService {
             jdbcFileService = EJBClientUtilities
                     .getInstance()
                     .getJDBCFileService();
+            
+            // If it's still null, throw an exception to prevent NPE later.
+            if (jdbcFileService == null) {
+                throw new EJBLookupException(
+                        "Unable to obtain a reference to [ "
+                        + JDBCFileService.class.getName()
+                        + " ].",
+                        JDBCFileService.class.getName());
+            }
         }
         return jdbcFileService;
     }
     
     /**
-     * Delete all individual archives that match the input  job ID.
+     * Delete all individual archives that match the input job ID.
      * 
      * @param jobID The job ID requested (must not be null, or empty String)
      */
@@ -257,17 +269,10 @@ public class JDBCArchiveService {
         if (datasource != null) {
             if ((jobID != null) && (!jobID.isEmpty())) {
                 
-                if (getJDBCFileService() != null) {
-                    getJDBCFileService().deleteFiles(jobID);
-                }
-                else {
-                    LOGGER.warn("Unable to obtain a reference to the "
-                            + "JDBCFileService EJB.  FILE_ENTRY entries for job ID [ "
-                            + jobID
-                            + " ] were not deleted leaving orphaned records.");
-                }
-                
                 try { 
+                    
+                    // First, delete the child FILE_ENTRY records
+                    getJDBCFileService().deleteFiles(jobID);
                     
                     conn = datasource.getConnection();
                     
@@ -283,6 +288,13 @@ public class JDBCArchiveService {
                     // an exception.
                     conn.commit();
                     
+                }
+                catch (EJBLookupException ele) {
+                    LOGGER.error("Unable to obtain a reference to [ "
+                            + ele.getEJBName()
+                            + " ].  Delete of job [  "
+                            + jobID
+                            + " ] will not be performed.");
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised "
@@ -338,17 +350,10 @@ public class JDBCArchiveService {
             if (archiveID >= 0) {
                 if ((jobID != null) && (!jobID.isEmpty())) {
                     
-                    if (getJDBCFileService() != null) {
-                        getJDBCFileService().deleteFiles(archiveID, jobID);
-                    }
-                    else {
-                        LOGGER.warn("Unable to obtain a reference to the "
-                                + "JDBCFileService EJB.  FILE_ENTRY entries for job ID [ "
-                                + jobID
-                                + " ] were not deleted leaving orphaned records.");
-                    }
-                    
                     try { 
+                        
+                        // First, delete the child FILE_ENTRY records.
+                        getJDBCFileService().deleteFiles(archiveID, jobID);
                         
                         conn = datasource.getConnection();
                         
@@ -357,14 +362,21 @@ public class JDBCArchiveService {
                         conn.setAutoCommit(false);
                         
                         stmt = conn.prepareStatement(sql);
-                        stmt.setLong(1, archiveID);
-                        stmt.setString(2, jobID);
+                        stmt.setLong(   1, archiveID);
+                        stmt.setString( 2, jobID);
                         stmt.executeUpdate();
                         
                         // Note: If the container Datasource has jta=true this will throw
                         // an exception.
                         conn.commit();
                         
+                    }
+                    catch (EJBLookupException ele) {
+                        LOGGER.error("Unable to obtain a reference to [ "
+                                + ele.getEJBName()
+                                + " ].  Delete of job [  "
+                                + jobID
+                                + " ] will not be performed.");
                     }
                     catch (SQLException se) {
                         LOGGER.error("An unexpected SQLException was raised "
@@ -516,6 +528,65 @@ public class JDBCArchiveService {
     }
     
     /**
+     * Retrieve a complete list of job IDs from the data store.  This method was 
+     * added in an effort to clean-up orphaned ARCHIVE_JOB records.
+     * 
+     * @return A list of job IDs.
+     */
+    public List<String> getJobIDs() {
+        
+        Connection        conn   = null;
+        List<String>      jobIDs = new ArrayList<String>();
+        PreparedStatement stmt   = null;
+        ResultSet         rs     = null;
+        long              start  = System.currentTimeMillis();
+        String            sql    = "select JOB_ID from " + TABLE_NAME;
+        
+        if (datasource != null) {
+            
+            try {
+                conn = datasource.getConnection();
+                stmt = conn.prepareStatement(sql);
+                rs   = stmt.executeQuery();
+                while (rs.next()) {
+                    jobIDs.add(rs.getString("JOB_ID"));
+                }
+            }
+            catch (SQLException se) {
+                LOGGER.error("An unexpected SQLException was raised while "
+                        + "attempting to retrieve a list of job IDs from the "
+                        + "target data source.  Error message [ "
+                        + se.getMessage() 
+                        + " ].");
+            }
+            finally {
+                try { 
+                    if (rs != null) { rs.close(); } 
+                } catch (Exception e) {}
+                try { 
+                    if (stmt != null) { stmt.close(); } 
+                } catch (Exception e) {}
+                try { 
+                    if (conn != null) { conn.close(); } 
+                } catch (Exception e) {}
+            }
+        }
+        else {
+            LOGGER.warn("DataSource object not injected by the container.  "
+                    + "An empty List will be returned to the caller.");
+        }
+        
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("[ "
+                    + jobIDs.size() 
+                    + " ] job IDs selected in [ "
+                    + (System.currentTimeMillis() - start) 
+                    + " ] ms.");
+        }
+        return jobIDs;
+    }
+
+    /**
      * 
      * @param archiveID
      * @param jobID
@@ -549,7 +620,7 @@ public class JDBCArchiveService {
                         rs   = stmt.executeQuery();
                         
                         if (rs.next()) {
-                            
+                                
                             archive.setID(rs.getLong("ID"));
                             archive.setArchive(rs.getString("ARCHIVE_FILE"));
                             archive.setArchiveID(rs.getLong("ARCHIVE_ID"));
@@ -569,23 +640,19 @@ public class JDBCArchiveService {
                             archive.setServerName(rs.getString("SERVER_NAME"));
                             archive.setSize(rs.getLong("ARCHIVE_SIZE"));
                             archive.setStartTime(rs.getLong("START_TIME"));
-                    
-                            if (getJDBCFileService() != null) {
-                                archive.setFiles(
-                                        getJDBCFileService().
-                                            getFiles(archiveID, jobID));
-                            }
-                            else {
-                                LOGGER.warn("Unable to obtain a reference to "
-                                        + "the JDBCFileService EJB. [ "
-                                        + TABLE_NAME 
-                                        + " ] entries for job ID [ "
-                                        + jobID
-                                        + " ] and archive ID [ "
-                                        + archiveID
-                                        + " ] were not retrieved");
-                            }
+                            archive.setFiles(
+                                    getJDBCFileService().
+                                        getFiles(archiveID, jobID));
+
                         }
+                    }
+                    catch (EJBLookupException ele) {
+                        LOGGER.error("Unable to obtain a reference to [ "
+                                + ele.getEJBName()
+                                + " ].  Unable to materialize FILE_ENTRY records "
+                                + "for job ID [ "
+                                + jobID
+                                + " ].");
                     }
                     catch (SQLException se) {
                         LOGGER.error("An unexpected SQLException was raised while "
@@ -657,8 +724,9 @@ public class JDBCArchiveService {
         
         if ((jobID != null) && (!jobID.isEmpty())) {
             archives = getArchives(jobID);
-            if (getJDBCFileService() != null) {
-                if ((archives != null) && (archives.size() > 0)) { 
+            
+            if ((archives != null) && (archives.size() > 0)) { 
+                try {
                     for (Archive archive : archives) {
                         
                         List<FileEntry> files = 
@@ -669,18 +737,22 @@ public class JDBCArchiveService {
                         
                     }
                 }
-                else {
-                    LOGGER.error("Unable to obtain the individual archives "
-                            + "associated with job ID [ "
+                catch (EJBLookupException ele) {
+                    LOGGER.error("Unable to obtain a reference to [ "
+                            + ele.getEJBName()
+                            + " ].  Unable to materialize FILE_ENTRY records "
+                            + "for job ID [ "
                             + jobID
                             + " ].");
                 }
             }
             else {
-                LOGGER.error("Unable to obtain a reference to the JDBCFileService "
-                        + "EJB.  The archives will not contain the list of "
-                        + "FileEntry objects.");
+                LOGGER.error("Unable to obtain the individual archives "
+                        + "associated with job ID [ "
+                        + jobID
+                        + " ].");
             }
+            
         }
         else {
             LOGGER.error("The input job ID is null or empty.");
@@ -767,22 +839,11 @@ public class JDBCArchiveService {
         
         if (datasource != null) {
             if (archive != null) {
-                    
-                if (getJDBCFileService() != null) {
-                    getJDBCFileService().insertFiles(archive.getFiles());
-                }
-                else {
-                    LOGGER.error("Unable to obtain a reference to the "
-                            + "JDBCFileService EJB.  [ "
-                            + TABLE_NAME 
-                            + " ] entries for job ID [ "
-                            + archive.getJobID()
-                            + " ] and archive ID [ "
-                            + archive.getArchiveID()
-                            + " ] were not inserted into the data store.");
-                }
                 
                 try { 
+                    
+                    // First, insert the child records
+                    getJDBCFileService().insertFiles(archive.getFiles());
                     
                     conn = datasource.getConnection();
                     
@@ -811,6 +872,14 @@ public class JDBCArchiveService {
                     // an exception.
                     conn.commit();
                     
+                }
+                catch (EJBLookupException ele) {
+                    LOGGER.error("Unable to obtain a reference to [ "
+                            + ele.getEJBName()
+                            + " ].  Unable to insert FILE_ENTRY records "
+                            + "for job ID [ "
+                            + archive.getJobID()
+                            + " ].");
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "
@@ -885,22 +954,11 @@ public class JDBCArchiveService {
         
         if (datasource != null) {
             if (archive != null) {
-                    
-                if (getJDBCFileService() != null) {
-                    getJDBCFileService().updateFiles(archive.getFiles());
-                }
-                else {
-                    LOGGER.error("Unable to obtain a reference to the "
-                            + "JDBCFileService EJB.  [ "
-                            + TABLE_NAME 
-                            + " ] entries for job ID [ "
-                            + archive.getJobID()
-                            + " ] and archive ID [ "
-                            + archive.getArchiveID()
-                            + " ] were not updated into the data store.");
-                }
                 
                 try { 
+                    
+                    // First, insert the child records
+                    getJDBCFileService().updateFiles(archive.getFiles());
                     
                     conn = datasource.getConnection();
                     
@@ -930,6 +988,14 @@ public class JDBCArchiveService {
                     // an exception.
                     conn.commit();
                     
+                }
+                catch (EJBLookupException ele) {
+                    LOGGER.error("Unable to obtain a reference to [ "
+                            + ele.getEJBName()
+                            + " ].  Unable to insert FILE_ENTRY records "
+                            + "for job ID [ "
+                            + archive.getJobID()
+                            + " ].");
                 }
                 catch (SQLException se) {
                     LOGGER.error("An unexpected SQLException was raised while "

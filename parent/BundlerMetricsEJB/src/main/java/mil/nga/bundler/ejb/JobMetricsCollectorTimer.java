@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import mil.nga.bundler.ejb.EJBClientUtilities;
+import mil.nga.bundler.ejb.exceptions.EJBLookupException;
 import mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI;
 
 /**
@@ -48,16 +49,32 @@ public class JobMetricsCollectorTimer {
 	
     /**
      * Private method used to obtain a reference to the target EJB.  
-     * @return Reference to the JobService EJB.
+     * 
+     * @return Reference to the JobMetricsCollectorI interface, null if the 
+     * interface could not be looked up.
      */
-    private JobMetricsCollectorI getJobMetricsCollector() {
+    private JobMetricsCollectorI getJobMetricsCollector() 
+            throws EJBLookupException {
+        
         if (metricsCollector == null) {
             LOGGER.warn("Application container failed to inject the "
-                    + "reference to [ JobMetricsCollectorI ].  Attempting to "
+                    + "reference to [ "
+                    + JobMetricsCollectorI.class.getName()
+                    + " ].  Attempting to "
                     + "look it up via JNDI.");
+            
             metricsCollector = EJBClientUtilities
                     .getInstance()
                     .getJobMetricsCollector();
+            
+            // If it's still null, throw an exception to prevent NPE later.
+            if (metricsCollector == null) {
+                throw new EJBLookupException(
+                        "Unable to obtain a reference to [ "
+                        + JobMetricsCollectorI.class.getName()
+                        + " ].",
+                        JobMetricsCollectorI.class.getName());
+            }
         }
         return metricsCollector;
     }
@@ -80,15 +97,20 @@ public class JobMetricsCollectorTimer {
 	    LOGGER.info("JobMetricsCollectorTimer launched at [ "
                 + df.format(new Date(System.currentTimeMillis()))
                 + " ].");
-	       
-	    if (getJobMetricsCollector() != null) {
-	        getJobMetricsCollector().collectMetrics();
-	        LOGGER.info("JobMetricsCollectorTimer complete at [ "
+	    
+	    try {
+	        getJobMetricsCollector().collectMetrics(); 
+	    }
+	    catch (EJBLookupException ele) {
+	        LOGGER.error("Unable to obtain a reference to [ "
+	                + ele.getEJBName()
+	                + " ].  Metrics collection operation will not be "
+	                + "performed.");
+	    }
+	    
+	    LOGGER.info("JobMetricsCollectorTimer complete at [ "
 	                    + df.format(new Date(System.currentTimeMillis()))
 	                    + " ].");
-	    }
-	    else {
-	        LOGGER.error("Unable to obtain a reference to the ");
-	    } 
+
     }
 }

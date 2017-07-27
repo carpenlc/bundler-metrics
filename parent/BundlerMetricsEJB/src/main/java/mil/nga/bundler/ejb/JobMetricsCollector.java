@@ -9,6 +9,7 @@ import javax.ejb.Stateless;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import mil.nga.bundler.ejb.exceptions.EJBLookupException;
 import mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI;
 import mil.nga.bundler.ejb.jdbc.JDBCJobMetricsService;
 import mil.nga.bundler.ejb.jdbc.JDBCJobService;
@@ -89,6 +90,7 @@ public class JobMetricsCollector implements JobMetricsCollectorI {
      * @return Metrics collected for the target job.
      */
     private BundlerJobMetrics getJobMetrics(Job job) {
+        
         return new BundlerJobMetrics.BundlerJobMetricsBuilder()
                 .archiveSize(job.getArchiveSize())
                 .archiveType(job.getArchiveType())
@@ -110,15 +112,61 @@ public class JobMetricsCollector implements JobMetricsCollectorI {
     }
     
     /**
+     * Private method used to obtain a reference to the target EJB.  
+     * @return Reference to the JobMetricsCollectorI interface, null if the 
+     * interface could not be looked up.
+     */
+    private JDBCJobService getJDBCJobService() 
+            throws EJBLookupException {
+        
+        if (jobService == null) {
+            LOGGER.warn("Application container failed to inject the "
+                    + "reference to [ "
+                    + JDBCJobService.class.getName()
+                    + " ].  Attempting to "
+                    + "look it up via JNDI.");
+            
+            jobService = EJBClientUtilities
+                    .getInstance()
+                    .getJDBCJobService();
+        }
+        return jobService;
+    }
+    
+    /**
+     * Private method used to obtain a reference to the target EJB.  
+     * @return Reference to the JobMetricsCollectorI interface, null if the 
+     * interface could not be looked up.
+     */
+    private JDBCJobMetricsService getJDBCJobMetricsService() 
+            throws EJBLookupException {
+        
+        if (metricsService == null) {
+            LOGGER.warn("Application container failed to inject the "
+                    + "reference to [ "
+                    + JDBCJobMetricsService.class.getName()
+                    + " ].  Attempting to "
+                    + "look it up via JNDI.");
+            
+            metricsService = EJBClientUtilities
+                    .getInstance()
+                    .getJDBCJobMetricsService();
+        }
+        return metricsService;
+    }
+    
+    /**
      * This method will determine which jobs need to have a metrics record 
      * created. 
      * 
      * @return A list of jobs that need a metrics record calculated.
      */
-    private List<String> getJobs() {
-        List<String> currentJobs = jobService.getJobIDs();
-        List<String> currentMetrics = metricsService.getJobIDs();
-        if ((currentJobs != null) && (!currentMetrics.isEmpty())) {
+    private List<String> getJobs() throws EJBLookupException {
+        
+        List<String> currentJobs = getJDBCJobService().getJobIDs();
+        List<String> currentMetrics = getJDBCJobMetricsService().getJobIDs();
+        
+        if ((currentJobs != null) && (!currentJobs.isEmpty())) {
             if ((currentMetrics != null) && (!currentMetrics.isEmpty())) {
                 currentJobs.removeAll(currentMetrics);
             }
@@ -163,42 +211,51 @@ public class JobMetricsCollector implements JobMetricsCollectorI {
         int  counter   = 0;
         long startTime = System.currentTimeMillis();
         
-        List<String> sourceList = getJobs();
-        if ((sourceList != null) && (!sourceList.isEmpty())) {
+        try {
             
-            LOGGER.info("Processing [ "
-                    + sourceList.size()
-                    + " ] jobs.");
-            
-            for (String jobID : sourceList) {
+            List<String> sourceList = getJobs();
+            if ((sourceList != null) && (!sourceList.isEmpty())) {
                 
-                Job job = jobService.getMaterializedJob(jobID);
-                if (job != null) {
+                LOGGER.info("Processing [ "
+                        + sourceList.size()
+                        + " ] jobs.");
+                
+                for (String jobID : sourceList) {
                     
-                    // Ensure that the job is in a "completed" state.
-                    if ((job.getState() == JobStateType.COMPLETE) ||
-                        (job.getState() == JobStateType.ERROR) || 
-                        (job.getState() == JobStateType.INVALID_REQUEST)) {
+                    Job job = jobService.getMaterializedJob(jobID);
+                    if (job != null) {
                         
-                        BundlerJobMetrics metrics = getJobMetrics(job);
-                        if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug("Inserting metrics record => " + metrics.toString());
+                        // Ensure that the job is in a "completed" state.
+                        if ((job.getState() == JobStateType.COMPLETE) ||
+                            (job.getState() == JobStateType.ERROR) || 
+                            (job.getState() == JobStateType.INVALID_REQUEST)) {
+                            
+                            BundlerJobMetrics metrics = getJobMetrics(job);
+                            if (LOGGER.isDebugEnabled()) {
+                                LOGGER.debug("Inserting metrics record => " + metrics.toString());
+                            }
+                            
+                            metricsService.insert(metrics);
+                            counter++;
+                            
                         }
-                        
-                        metricsService.insert(metrics);
-                        counter++;
-                        
+                    }
+                    else {
+                        LOGGER.warn("Unable to find a job matching job ID [ "
+                                + jobID
+                                + " ].  Job object returned was null.");
                     }
                 }
-                else {
-                    LOGGER.warn("Unable to find a job matching job ID [ "
-                            + jobID
-                            + " ].  Job object returned was null.");
-                }
+            }
+            else {
+                LOGGER.info("There are no jobs requiring metrics collection.");
             }
         }
-        else {
-            LOGGER.info("There are no jobs requiring metrics collection.");
+        catch (EJBLookupException ele) {
+            LOGGER.error("Unable to obtain a reference to [ "
+                    + ele.getEJBName()
+                    + " ].  Metrics collection operation will not be "
+                    + "performed.");
         }
         
         LOGGER.info("Metrics collection completed in [ "

@@ -17,6 +17,7 @@ import javax.naming.NamingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import mil.nga.bundler.ejb.exceptions.EJBLookupException;
 import mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI;
 import mil.nga.bundler.ejb.jdbc.JDBCArchiveService;
 import mil.nga.bundler.ejb.jdbc.JDBCFileService;
@@ -26,8 +27,12 @@ import mil.nga.bundler.ejb.jdbc.JDBCJobService;
 /**
  * Convenience class used by the Web tier to look up EJB references within
  * the container.  This class is specific to the JBoss/Wildfly application
- * containers.  This was initially developed because JBoss EAP 6.x does not 
- * support EJB injection into the Web tier.
+ * containers.  This was initially developed for two reasons:
+ * 
+ *  (1) JBoss EAP 6.2 was not reliably injecting the EJBs.
+ *  (2) JBoss EAP 6.x does not support EJB injection into the Web tier.  
+ * 
+ * This appears to be largely irrelevant once we got to Wildfly 10.1.
  * 
  * @author L. Craig Carpenter
  */
@@ -248,7 +253,7 @@ public class EJBClientUtilities {
      * @return The JDBCArchiveService interface, or null if we couldn't 
      * look it up.
      */
-    public JDBCArchiveService getJDBCArchiveService() {
+    public JDBCArchiveService getJDBCArchiveService() throws EJBLookupException {
         
         JDBCArchiveService service = null;
         Object           ejb     = getEJB(JDBCArchiveService.class);
@@ -258,18 +263,21 @@ public class EJBClientUtilities {
                 service = (JDBCArchiveService)ejb;
             }
             else {
-                LOGGER.error("Unable to look up EJB [ "
+                throw new EJBLookupException("Unable to look up EJB [ "
                         + getJNDIName(JDBCArchiveService.class)
                         + " ] returned reference was the wrong type.  "
                         + "Type returned [ "
                         + ejb.getClass().getCanonicalName()
-                        + " ].");
+                        + " ].",
+                        JDBCArchiveService.class.getName());
             }
         }
         else {
-            LOGGER.error("Unable to look up EJB [ "
+            throw new EJBLookupException(
+                    "Unable to look up Object [ "
                     + getJNDIName(JDBCArchiveService.class)
-                    + " ] returned reference was null.");
+                    + " ].",
+                    JDBCArchiveService.class.getName());
         }
         return service;
     }
@@ -281,7 +289,8 @@ public class EJBClientUtilities {
      * @return The JDBCFileService interface, or null if we couldn't 
      * look it up.
      */
-    public JDBCFileService getJDBCFileService() {
+    public JDBCFileService getJDBCFileService() 
+            throws EJBLookupException {
         
         JDBCFileService service = null;
         Object           ejb     = getEJB(JDBCFileService.class);
@@ -291,18 +300,21 @@ public class EJBClientUtilities {
                 service = (JDBCFileService)ejb;
             }
             else {
-                LOGGER.error("Unable to look up EJB [ "
+                throw new EJBLookupException("Unable to look up EJB [ "
                         + getJNDIName(JDBCFileService.class)
                         + " ] returned reference was the wrong type.  "
                         + "Type returned [ "
                         + ejb.getClass().getCanonicalName()
-                        + " ].");
+                        + " ].",
+                        JDBCFileService.class.getName());
             }
         }
         else {
-            LOGGER.error("Unable to look up EJB [ "
+            throw new EJBLookupException(
+                    "Unable to look up Object [ "
                     + getJNDIName(JDBCFileService.class)
-                    + " ] returned reference was null.");
+                    + " ].",
+                    JDBCFileService.class.getName());
         }
         return service;
     }
@@ -314,7 +326,7 @@ public class EJBClientUtilities {
      * @return The JDBCJobMetricsService interface, or null if we couldn't 
      * look it up.
      */
-    public JDBCJobMetricsService getJDBCJobMetricsService() {
+    public JDBCJobMetricsService getJDBCJobMetricsService() throws EJBLookupException {
         
         JDBCJobMetricsService service = null;
         Object           ejb     = getEJB(JDBCJobMetricsService.class);
@@ -324,18 +336,21 @@ public class EJBClientUtilities {
                 service = (JDBCJobMetricsService)ejb;
             }
             else {
-                LOGGER.error("Unable to look up EJB [ "
+                throw new EJBLookupException("Unable to look up EJB [ "
                         + getJNDIName(JDBCJobMetricsService.class)
                         + " ] returned reference was the wrong type.  "
                         + "Type returned [ "
                         + ejb.getClass().getCanonicalName()
-                        + " ].");
+                        + " ].",
+                        JDBCFileService.class.getName());
             }
         }
         else {
-            LOGGER.error("Unable to look up EJB [ "
+            throw new EJBLookupException(
+                    "Unable to look up Object [ "
                     + getJNDIName(JDBCJobMetricsService.class)
-                    + " ] returned reference was null.");
+                    + " ].",
+                    JDBCJobMetricsService.class.getName());
         }
         return service;
     }
@@ -347,28 +362,32 @@ public class EJBClientUtilities {
      * @return The JDBCJobService interface, or null if we couldn't 
      * look it up.
      */
-    public JDBCJobService getJDBCJobService() {
+    public JDBCJobService getJDBCJobService() 
+            throws EJBLookupException {
         
         JDBCJobService service = null;
-        Object           ejb     = getEJB(JDBCJobService.class);
+        Object         ejb      = getEJB(JDBCJobService.class);
         
         if (ejb != null) {
             if (ejb instanceof mil.nga.bundler.ejb.jdbc.JDBCJobService) {
                 service = (JDBCJobService)ejb;
             }
             else {
-                LOGGER.error("Unable to look up EJB [ "
+                throw new EJBLookupException("Unable to look up EJB [ "
                         + getJNDIName(JDBCJobService.class)
                         + " ] returned reference was the wrong type.  "
                         + "Type returned [ "
                         + ejb.getClass().getCanonicalName()
-                        + " ].");
+                        + " ].",
+                        JDBCJobService.class.getName());
             }
         }
         else {
-            LOGGER.error("Unable to look up EJB [ "
+            throw new EJBLookupException(
+                    "Unable to look up Object [ "
                     + getJNDIName(JDBCJobService.class)
-                    + " ] returned reference was null.");
+                    + " ].",
+                    JDBCJobService.class.getName());
         }
         return service;
     }
@@ -380,31 +399,35 @@ public class EJBClientUtilities {
      * @return The JobMetricsCollector interface, or null if we couldn't 
      * look it up.
      */
-    public JobMetricsCollectorI getJobMetricsCollector() {
+    public JobMetricsCollectorI getJobMetricsCollector() 
+            throws EJBLookupException {
         
         JobMetricsCollectorI service = null;
-        Object           ejb     = getEJB(JobMetricsCollector.class,
-                                           JobMetricsCollectorI.class);
+        Object               ejb      = getEJB(JobMetricsCollector.class,
+                                               JobMetricsCollectorI.class);
         
         if (ejb != null) {
             if (ejb instanceof mil.nga.bundler.ejb.interfaces.JobMetricsCollectorI) {
                 service = (JobMetricsCollectorI)ejb;
             }
             else {
-                LOGGER.error("Unable to look up EJB [ "
+                throw new EJBLookupException("Unable to look up EJB [ "
                         + getJNDIName(JobMetricsCollector.class,
                                 JobMetricsCollectorI.class)
                         + " ] returned reference was the wrong type.  "
                         + "Type returned [ "
                         + ejb.getClass().getCanonicalName()
-                        + " ].");
+                        + " ].",
+                        JDBCJobService.class.getName());
             }
         }
         else {
-            LOGGER.error("Unable to look up EJB [ "
+            throw new EJBLookupException(
+                    "Unable to look up Object [ "
                     + getJNDIName(JobMetricsCollector.class,
-                            JobMetricsCollectorI.class)
-                    + " ] returned reference was null.");
+                                  JobMetricsCollectorI.class)
+                    + " ].",
+                    JobMetricsCollectorI.class.getName());
         }
         return service;
     }    
