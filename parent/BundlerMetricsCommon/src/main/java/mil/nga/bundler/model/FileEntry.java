@@ -267,6 +267,27 @@ public class FileEntry implements Serializable {
     }
     
     /**
+     * Convert the internal members to an XML format for display.  
+     * @return
+     */
+    public String toXML() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<FILE_ENTRY>");
+        sb.append("<ID>");
+        sb.append(getID());
+        sb.append("</ID>");
+        sb.append("<JOB_ID>");
+        sb.append(getJobID());
+        sb.append("</JOB_ID>");
+        
+
+        
+        
+        sb.append("</FILE_ENTRY>");
+        return sb.toString();
+    }
+    
+    /**
      * Convert to internal members to String format for log/display.
      */
     public String toString() {
