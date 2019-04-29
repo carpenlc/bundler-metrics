@@ -379,6 +379,10 @@ public class JDBCJobMetricsService {
                             + "into the data store.  Error message [ "
                             + se.getMessage() 
                             + " ].");
+                	LOGGER.info("Error occurred attempting to insert the "
+                			+ "following metrics record => [ "
+                			+ metrics.toString()
+                			+ " ].");
                 }
                 finally {
                     try { 
