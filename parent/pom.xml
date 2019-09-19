@@ -24,7 +24,8 @@
 
         <jdk.version>1.8</jdk.version>
         <javaee.version>7.0</javaee.version>
-        <jackson.version>2.9.8</jackson.version>
+        <jackson-databind.version>2.9.9.3</jackson-databind.version>
+        <jackson.version>2.9.9</jackson.version>
         <woodstox.version>4.0.0</woodstox.version>
         <logback.version>1.2.2</logback.version>
         <slf4j.version>1.7.25</slf4j.version>
@@ -80,7 +81,7 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
+            <version>${jackson-databind.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
