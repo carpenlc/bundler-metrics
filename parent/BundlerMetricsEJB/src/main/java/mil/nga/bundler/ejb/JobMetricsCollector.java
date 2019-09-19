@@ -1,5 +1,6 @@
 package mil.nga.bundler.ejb;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.ejb.EJB;
@@ -90,7 +91,6 @@ public class JobMetricsCollector implements JobMetricsCollectorI {
      * @return Metrics collected for the target job.
      */
     private BundlerJobMetrics getJobMetrics(Job job) {
-        
         return new BundlerJobMetrics.BundlerJobMetricsBuilder()
                 .archiveSize(job.getArchiveSize())
                 .archiveType(job.getArchiveType())
@@ -163,23 +163,29 @@ public class JobMetricsCollector implements JobMetricsCollectorI {
      */
     private List<String> getJobs() throws EJBLookupException {
         
+    	// The number of jobs in the current JOBS table is always going 
+    	// to be (far) fewer than the total number of jobs in the metrics
+    	// table.  Rather than select all jobs from the metrics and use
+    	// the collections class to get the disjoint set, just see if 
+    	// the job ID exists in the target
+    	if (LOGGER.isDebugEnabled()) {
+    		LOGGER.debug("Determining jobs that need a metrics record created.");
+    	}
         List<String> currentJobs = getJDBCJobService().getJobIDs();
-        List<String> currentMetrics = getJDBCJobMetricsService().getJobIDs();
+        List<String> jobs        = new ArrayList<String>();
         
         if ((currentJobs != null) && (!currentJobs.isEmpty())) {
-            if ((currentMetrics != null) && (!currentMetrics.isEmpty())) {
-                currentJobs.removeAll(currentMetrics);
-            }
-            else {
-                LOGGER.warn("Unable to select list of current metrics.  "
-                        + "The return list is null.");
-            }
+        	for (String jobID : currentJobs) {
+	        	if (!getJDBCJobMetricsService().jobIDExists(jobID)) {
+	        		jobs.add(jobID);
+	        	}
+        	}
         }
         else {
             LOGGER.warn("Unable to select list of current jobs.  "
                     + "The return list is null.");
         }
-        return currentJobs;
+        return jobs;
     }
     
     /**
@@ -210,7 +216,7 @@ public class JobMetricsCollector implements JobMetricsCollectorI {
         
         int  counter   = 0;
         long startTime = System.currentTimeMillis();
-        
+        LOGGER.info("Starting bundler metrics collection...");
         try {
             
             List<String> sourceList = getJobs();
@@ -222,18 +228,31 @@ public class JobMetricsCollector implements JobMetricsCollectorI {
                 
                 for (String jobID : sourceList) {
                     
+                	LOGGER.info("Processing job ID [ " 
+                    		+ jobID
+                    		+ " ].");
+                    
                     Job job = jobService.getMaterializedJob(jobID);
+                    
+                    LOGGER.info("Job retrieved in [ "
+                    		+ (System.currentTimeMillis() - startTime)
+                    		+ " ].");
                     if (job != null) {
                         
+                    	LOGGER.info("Job state [ "
+                    			+ job.getState().toString()
+                    			+ " ].");
                         // Ensure that the job is in a "completed" state.
                         if ((job.getState() == JobStateType.COMPLETE) ||
                             (job.getState() == JobStateType.ERROR) || 
                             (job.getState() == JobStateType.INVALID_REQUEST)) {
                             
                             BundlerJobMetrics metrics = getJobMetrics(job);
-                            if (LOGGER.isDebugEnabled()) {
-                                LOGGER.debug("Inserting metrics record => " + metrics.toString());
-                            }
+                            //if (LOGGER.isDebugEnabled()) {
+                                LOGGER.info("Inserting metrics record => [ " 
+                                		+ metrics.toString()
+                                		);
+                            //}
                             
                             metricsService.insert(metrics);
                             counter++;

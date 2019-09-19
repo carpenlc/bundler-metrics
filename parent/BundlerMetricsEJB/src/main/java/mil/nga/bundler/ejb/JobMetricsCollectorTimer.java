@@ -63,6 +63,7 @@ public class JobMetricsCollectorTimer {
                     + " ].  Attempting to "
                     + "look it up via JNDI.");
             
+            
             metricsCollector = EJBClientUtilities
                     .getInstance()
                     .getJobMetricsCollector();
