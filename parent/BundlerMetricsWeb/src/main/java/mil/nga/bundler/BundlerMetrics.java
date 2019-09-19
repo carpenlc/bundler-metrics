@@ -124,6 +124,7 @@ public class BundlerMetrics {
     @Path("/startMetricsCollection")
     public Response startCleanup() {
         try {
+        	LOGGER.info("Metrics collection started manually.");
             getJobMetricsCollector().collectMetrics();
         }
         catch (EJBLookupException ele) {
